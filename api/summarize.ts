@@ -1,7 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import { bearerToken, supabaseAsUser, supabaseAdmin } from './_lib/supabaseAdmin.js';
-
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 const MINUTES_SCHEMA = {
   type: 'object',
   properties: {

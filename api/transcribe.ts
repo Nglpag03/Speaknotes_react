@@ -93,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!groqKey) return res.status(500).json({ error: 'server missing GROQ_API_KEY' });
 
   const form = new FormData();
-  form.append('file', new Blob([audio.data], { type: audio.contentType ?? 'audio/wav' }), audio.filename ?? 'clip.wav');
+  form.append('file', new Blob([new Uint8Array(audio.data.buffer as ArrayBuffer, audio.data.byteOffset, audio.data.byteLength)], { type: audio.contentType ?? 'audio/wav' }), audio.filename ?? 'clip.wav');
   form.append('model', groqModel);
   form.append('response_format', 'json');
   if (process.env.TRANSCRIBE_LANGUAGE) form.append('language', process.env.TRANSCRIBE_LANGUAGE);

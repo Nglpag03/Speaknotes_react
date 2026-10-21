@@ -30,8 +30,8 @@ export function supabaseAdmin() {
   );
 }
 
-export function bearerToken(req: { headers: Record<string, string | string[] | undefined> }): string | null {
-  const raw = req.headers['authorization'] ?? req.headers['Authorization'];
+export function bearerToken(headers: Record<string, string | string[] | undefined>): string | null {
+  const raw = headers['authorization'] ?? headers['Authorization'];
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value?.startsWith('Bearer ')) return null;
   const token = value.slice(7).trim();
