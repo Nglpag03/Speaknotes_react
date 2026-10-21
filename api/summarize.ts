@@ -41,8 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq('id', meetingCode)
     .maybeSingle();
   if (mErr || !meeting) return res.status(404).json({ error: 'meeting not found' });
-  const { data: authUser } = await user.auth.getUser();
-  if (meeting.host_id !== authUser.user?.id) return res.status(403).json({ error: 'host only' });
+  const { data: { user: authUser } } = await user.auth.getUser();
+  if (!authUser || meeting.host_id !== authUser.id) return res.status(403).json({ error: 'host only' });
 
   // 2. Idempotency: return existing minutes if already generated
   const admin = supabaseAdmin();

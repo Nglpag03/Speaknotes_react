@@ -78,11 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 3. Membership check via the caller's JWT (RLS applies)
   const user = supabaseAsUser(token);
+  const { data: { user: authUser } } = await user.auth.getUser();
+  if (!authUser) return res.status(401).json({ error: 'invalid token' });
+
   const { data: member, error: memberErr } = await user
     .from('participants')
     .select('user_id')
     .eq('meeting_id', meetingCode)
-    .eq('user_id', (await user.auth.getUser()).data.user?.id ?? '')
+    .eq('user_id', authUser.id)
     .is('kicked_at', null)
     .maybeSingle();
   if (memberErr || !member) return res.status(403).json({ error: 'not a participant' });
