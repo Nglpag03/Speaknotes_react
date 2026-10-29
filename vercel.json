@@ -7,6 +7,6 @@
     }
   },
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|@vite/|@react-refresh|__vite_ping|.*\\..*).*)", "destination": "/index.html" }
   ]
 }
