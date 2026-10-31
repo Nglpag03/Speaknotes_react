@@ -173,9 +173,18 @@ export default function HostMeeting() {
               End Meeting
             </button>
           )}
-          <button onClick={handleSummarize} disabled={busy || transcripts.length === 0}>
-            {minutes ? 'Regenerate Summary' : 'Generate AI Minutes'}
-          </button>
+<button onClick={handleSummarize} disabled={busy || transcripts.length === 0}>
+  {busy ? (
+    <>
+      <span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', marginRight: '8px' }} />
+      Generating Minutes...
+    </>
+  ) : minutes ? (
+    'Regenerate Summary'
+  ) : (
+    'Generate AI Minutes'
+  )}
+</button>
           {minutes && (
             <button onClick={() => exportMinutesPdf(meeting, minutes)}>
               Download Minutes PDF

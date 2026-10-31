@@ -1,3 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap');
+
+
 :root {
   font-family: system-ui, sans-serif;
 
@@ -441,7 +444,7 @@ form input:focus {
   min-height: 370px;
   overflow: hidden;
   position: relative;
-  transform: perspective(1200px) rotateY(-2deg) rotateX(1deg);
+  transform: none;
   width: 100%;
   z-index: 1;
 }
@@ -785,20 +788,31 @@ form input:focus {
 
 @media (max-width: 980px) {
   .auth-layout {
-    grid-template-columns: minmax(420px, 52%) 1fr;
+    grid-template-columns: 1fr; /* Stack on smaller screens */
   }
 
   .showcase {
-    padding: 44px 28px;
+    display: none; /* Hide the mockup entirely on tablets/small laptops */
   }
 
-  .dashboard-shell {
-    transform: none;
-    width: 620px;
+  .auth-panel {
+    min-height: 100vh;
+    padding: 28px 24px 22px;
   }
 
-  .showcase-copy {
-    width: 620px;
+  .auth-content {
+    max-width: 440px;
+    padding: 54px 0 48px;
+    margin: auto;
+  }
+
+  .mobile-eyebrow {
+    color: #4d8478;
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
   }
 }
 
@@ -1124,8 +1138,12 @@ form input:focus {
   background: #fff;
   border: 1px solid #e2e5e1;
   box-shadow: 0 5px 20px rgba(32, 55, 49, .04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-
+.join-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(32, 55, 49, 0.08);
+}
 .action-number {
   color: rgba(255,255,255,.33);
   font-family: 'Manrope', sans-serif;
@@ -1211,6 +1229,22 @@ form input:focus {
   font-size: 11px;
   min-width: 0;
   padding: 11px 12px;
+}
+.create-card {
+  background: linear-gradient(135deg, #285e53 0%, #173a35 100%);
+  position: relative;
+  overflow: hidden;
+}
+.create-card::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 150px;
+  height: 150px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  filter: blur(20px);
 }
 
 .create-card input {
@@ -1754,4 +1788,36 @@ form input:focus {
   left: auto;
   width: 150px;
   background: #173d36; /* Match mobile nav */
+}
+/* Auth Alerts (Error & Success) */
+.auth-alert {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.auth-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.auth-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+/* Secure Badge */
+.secure-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #9aa09e;
+  margin-top: 20px;
 }

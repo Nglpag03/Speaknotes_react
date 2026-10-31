@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { signIn, signUp, signInWithGoogle } from '../lib/auth'
+import { signIn, signUp, signInWithGoogle, resetPassword } from '../lib/auth'
 
 type Mode = 'signin' | 'signup'
 
@@ -46,6 +46,7 @@ function GoogleIcon() {
         d="M12 6.1c1.5 0 2.8.5 3.9 1.5l2.9-2.9A9.8 9.8 0 0 0 3.1 7.4l3.4 2.8A5.9 5.9 0 0 1 12 6.1Z"
       />
     </svg>
+
   )
 }
 
@@ -168,8 +169,9 @@ function DashboardPreview() {
         <span />
         Realtime transcript synced
       </div>
-    </section>
+    </section>  
   )
+  
 }
 
 export default function Auth() {
@@ -183,30 +185,53 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
-    setBusy(true)
+async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault()
+  setError(null)
+  setSuccess(null)
+  setBusy(true)
 
-    try {
-      if (mode === 'signup') {
-        await signUp(email, password, fullName)
-      } else {
-        await signIn(email, password)
-      }
-
+  try {
+    if (mode === 'signup') {
+      await signUp(email, password, fullName)
+      setSuccess('Account created. You can now sign in.')
+    } else {
+      await signIn(email, password)
       navigate('/home')
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Something went wrong. Please try again.',
-      )
-    } finally {
-      setBusy(false)
     }
+  } catch (err) {
+    // UX: Make the error readable
+    const msg = err instanceof Error ? err.message : 'Something went wrong.'
+    if (msg.includes('Invalid login credentials')) {
+      setError('Incorrect email or password. Please try again.')
+    } else if (msg.includes('Email not confirmed')) {
+      setError('Please check your email and click the confirmation link.')
+    } else {
+      setError(msg)
+    }
+  } finally {
+    setBusy(false)
   }
+}
+
+async function onForgotPassword() {
+  if (!email) {
+    setError('Please enter your email address first.')
+    return
+  }
+  try {
+    setBusy(true)
+    await resetPassword(email)
+    setSuccess('Password reset link sent! Check your email.')
+    setError(null)
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to send reset link.')
+  } finally {
+    setBusy(false)
+  }
+}
 
   async function onGoogle() {
     setError(null)
@@ -338,7 +363,7 @@ export default function Auth() {
                 <span>Password</span>
 
                 {mode === 'signin' && (
-                  <button type="button">
+                  <button type="button" onClick={onForgotPassword}>
                     Forgot password?
                   </button>
                 )}
@@ -378,11 +403,13 @@ export default function Auth() {
             </label>
 
             {error && (
-              <p
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-                role="alert"
-              >
+              <p className="auth-alert auth-error" role="alert">
                 {error}
+              </p>
+            )}
+            {success && (
+              <p className="auth-alert auth-success" role="status">
+                {success}
               </p>
             )}
 
@@ -400,6 +427,14 @@ export default function Auth() {
               )}
             </button>
           </form>
+
+          <div className="secure-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            Secure, encrypted authentication
+          </div>
 
           <p className="account-prompt">
             {mode === 'signin'
@@ -430,7 +465,6 @@ export default function Auth() {
           </nav>
         </footer>
       </section>
-
       <DashboardPreview />
     </main>
   )

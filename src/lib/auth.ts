@@ -8,6 +8,17 @@ export async function signUp(email: string, password: string, fullName: string) 
     options: { data: { full_name: fullName } },
   });
   if (error) throw error;
+
+  // If identities array is empty, the email already exists in Supabase
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    throw new Error('An account with this email already exists. Please sign in instead.');
+  }
+
+  // If email confirmation is required, session will be null
+  if (!data.session) {
+    throw new Error('Please check your email to confirm your account before signing in.');
+  }
+
   return data;
 }
 
@@ -47,5 +58,12 @@ export async function updateFullName(fullName: string) {
     .from('profiles')
     .update({ full_name: fullName })
     .eq('id', user.id);
+  if (error) throw error;
+}
+
+export async function resetPassword(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/auth`,
+  });
   if (error) throw error;
 }
