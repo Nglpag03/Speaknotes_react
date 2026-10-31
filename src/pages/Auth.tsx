@@ -186,35 +186,48 @@ export default function Auth() {
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setSuccess(null)
 
-async function onSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault()
-  setError(null)
-  setSuccess(null)
-  setBusy(true)
+    // Password match validation
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
 
-  try {
-    if (mode === 'signup') {
-      await signUp(email, password, fullName)
-      setSuccess('Account created. You can now sign in.')
-    } else {
-      await signIn(email, password)
-      navigate('/home')
+    setBusy(true)
+
+    try {
+      if (mode === 'signup') {
+        await signUp(email, password, fullName)
+        setSuccess('Account created. You can now sign in.')
+        setMode('signin') // Automatically switch to sign in mode
+        setPassword('')
+        setConfirmPassword('')
+      } else {
+        await signIn(email, password)
+        navigate('/home')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong.'
+      if (msg.includes('Invalid login credentials')) {
+        setError('Incorrect email or password. Please try again.')
+      } else if (msg.includes('Email not confirmed')) {
+        setError('Please check your email and click the confirmation link.')
+      } else if (msg.includes('Password should be at least')) {
+         setError('Password must be at least 8 characters long.')
+      } else {
+        setError(msg)
+      }
+    } finally {
+      setBusy(false)
     }
-  } catch (err) {
-    // UX: Make the error readable
-    const msg = err instanceof Error ? err.message : 'Something went wrong.'
-    if (msg.includes('Invalid login credentials')) {
-      setError('Incorrect email or password. Please try again.')
-    } else if (msg.includes('Email not confirmed')) {
-      setError('Please check your email and click the confirmation link.')
-    } else {
-      setError(msg)
-    }
-  } finally {
-    setBusy(false)
   }
-}
 
 async function onForgotPassword() {
   if (!email) {
@@ -252,6 +265,7 @@ async function onForgotPassword() {
   function switchMode(nextMode: Mode) {
     setMode(nextMode)
     setPassword('')
+    setConfirmPassword('')
     setError(null)
   }
 
@@ -331,14 +345,11 @@ async function onForgotPassword() {
             {mode === 'signup' && (
               <label>
                 <span>Full name</span>
-
                 <input
                   autoComplete="name"
                   type="text"
                   value={fullName}
-                  onChange={(event) =>
-                    setFullName(event.target.value)
-                  }
+                  onChange={(event) => setFullName(event.target.value)}
                   placeholder="Alex Morgan"
                   required
                 />
@@ -347,7 +358,6 @@ async function onForgotPassword() {
 
             <label>
               <span>Email address</span>
-
               <input
                 autoComplete="email"
                 type="email"
@@ -361,7 +371,6 @@ async function onForgotPassword() {
             <label>
               <div className="label-row">
                 <span>Password</span>
-
                 {mode === 'signin' && (
                   <button type="button" onClick={onForgotPassword}>
                     Forgot password?
@@ -371,42 +380,67 @@ async function onForgotPassword() {
 
               <span className="password-field">
                 <input
-                  autoComplete={
-                    mode === 'signin'
-                      ? 'current-password'
-                      : 'new-password'
-                  }
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
+                  onChange={(event) => setPassword(event.target.value)}
                   placeholder="Enter your password"
-                  minLength={6}
                   required
+                  // We remove minLength={6} and let our custom validation handle it for better UX
                 />
-
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowPassword((current) => !current)
-                  }
-                  aria-label={
-                    showPassword
-                      ? 'Hide password'
-                      : 'Show password'
-                  }
+                  onClick={() => setShowPassword((current) => !current)}
                 >
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
               </span>
             </label>
 
+            {/* PASSWORD REQUIREMENTS CHECKLIST */}
+            {mode === 'signup' && (
+              <div className="password-requirements">
+                <span className={password.length >= 8 ? 'valid' : ''}>
+                  ✓ At least 8 characters
+                </span>
+                <span className={/[A-Z]/.test(password) ? 'valid' : ''}>
+                  ✓ One uppercase letter
+                </span>
+                <span className={/[^A-Za-z0-9]/.test(password) ? 'valid' : ''}>
+                  ✓ One special character (e.g. !@#$%)
+                </span>
+              </div>
+            )}
+
+            {/* CONFIRM PASSWORD FIELD */}
+            {mode === 'signup' && (
+              <label>
+                <span>Confirm Password</span>
+                <span className="password-field">
+                  <input
+                    autoComplete="new-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Confirm your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                  >
+                    {showConfirmPassword ? 'Hide' : 'Show'}
+                  </button>
+                </span>
+              </label>
+            )}
+
             {error && (
               <p className="auth-alert auth-error" role="alert">
                 {error}
               </p>
             )}
+
             {success && (
               <p className="auth-alert auth-success" role="status">
                 {success}

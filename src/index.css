@@ -1821,3 +1821,26 @@ form input:focus {
   color: #9aa09e;
   margin-top: 20px;
 }
+
+/* Password Requirements Checklist */
+.password-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: -6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #9aa09e;
+  padding-left: 4px;
+}
+
+.password-requirements span {
+  display: flex;
+  align-items: center;
+  transition: color 200ms ease;
+}
+
+.password-requirements span.valid {
+  color: #15803d; /* Green when valid */
+  font-weight: 500;
+}
