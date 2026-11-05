@@ -79,19 +79,165 @@ export async function getMinutes(code: string): Promise<Minutes | null> {
   if (error) throw error;
   return data;
 }
-
 export async function requestSummary(code: string): Promise<{ created: boolean; minutes: Minutes }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('not signed in');
-  const res = await fetch('/api/summarize', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ meeting_code: code }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error ?? `summarize failed (${res.status})`);
-  return body as { created: boolean; minutes: Minutes };
+  // 1. Fetch transcripts
+  const { data: transcripts, error: txError } = await supabase
+    .from('transcripts')
+    .select('full_name, content')
+    .eq('meeting_id', code)
+    .order('created_at', { ascending: true });
+
+  if (txError) throw txError;
+  if (!transcripts || transcripts.length === 0) {
+    throw new Error('No transcripts available for this meeting. Speak first!');
+  }
+
+  const transcriptText = transcripts
+    .map((t) => `${t.full_name ?? 'Guest'}: ${t.content}`)
+    .join('\n');
+
+  const prompt = `You are an AI assistant tasked with generating formal meeting minutes for a university setting.
+Analyze the following transcript and extract the information to fill out this exact JSON schema.
+
+CRITICAL INSTRUCTIONS:
+1. "agenda" should be a list of topics discussed.
+2. "present" should be a list of names of people who spoke or were mentioned.
+3. "table_data" is the most important. You must map the discussion into rows. 
+   - "agenda_no" should be a short category (e.g., "Preliminaries", "Unfinished Business", "New Business").
+   - "activities" is the specific issue or topic discussed.
+   - "raised_by" is the person who brought it up.
+   - "action" is the agreed-upon solution, decision, or next step.
+
+Return ONLY valid JSON in this exact format:
+{
+  "title": "Minutes of the Meeting",
+  "date": "Extract date from transcript or use today",
+  "venue": "Extract venue if mentioned, else 'N/A'",
+  "time_started": "Extract start time if mentioned, else 'N/A'",
+  "time_ended": "Extract end time if mentioned, else 'N/A'",
+  "agenda": ["Topic 1", "Topic 2"],
+  "present": ["Name 1", "Name 2"],
+  "table_data": [
+    {
+      "agenda_no": "1",
+      "activities": "Discussion about the Q4 budget",
+      "raised_by": "John Doe",
+      "action": "Approved the budget and assigned Jane to finalize paperwork."
+    }
+  ]
+}
+
+Transcript:
+${transcriptText}`;
+
+  let content;
+
+  // --- ATTEMPT 1: GEMINI ---
+  try {
+    const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const geminiModel = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
+    if (!geminiKey) throw new Error('No Gemini key');
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+        }),
+      }
+    );
+
+    if (!geminiRes.ok) throw new Error(`Gemini status: ${geminiRes.status}`);
+    
+    const geminiData = await geminiRes.json();
+    let rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) throw new Error('Gemini empty response');
+    
+    rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    content = JSON.parse(rawText);
+    console.log("✅ Used Gemini successfully");
+
+  } catch (geminiError) {
+    // --- ATTEMPT 2: GROQ FALLBACK ---
+    console.warn("Gemini failed, falling back to Groq...", geminiError);
+    
+    const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+    if (!groqKey) throw new Error('Gemini failed and no Groq key available.');
+
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${groqKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-oss-120b",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!groqRes.ok) {
+      const errText = await groqRes.text();
+      console.error("Groq API Error:", errText);
+      throw new Error("Both Gemini and Groq failed.");
+    }
+
+    const groqData = await groqRes.json();
+    let rawText = groqData.choices[0].message.content;
+    rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    content = JSON.parse(rawText);
+    console.log("✅ Used Groq fallback successfully");
+  }
+
+  // 3. Save to Supabase (same as before)
+  const { data: minutes, error: saveError } = await supabase
+    .from('minutes')
+    .upsert({
+      meeting_id: code,
+      content,
+      model: 'gemini-or-groq',
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (saveError) {
+    console.error("🚨 SUPABASE SAVE ERROR:", saveError);
+    throw new Error(saveError.message);
+  }
+
+  return { created: true, minutes };
+}
+export async function listJoinedMeetings(): Promise<Meeting[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // We use a join to get the meeting details from the participants table
+  const { data, error } = await supabase
+    .from('participants')
+    .select(`
+      meeting_id,
+      meetings (
+        id,
+        host_id,
+        title,
+        status,
+        created_at,
+        ended_at
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: false });
+
+  if (error) throw error;
+
+  // Flatten the data so it returns a clean array of Meeting objects
+  return data
+    .map((row: any) => row.meetings)
+    .filter((m: any) => m !== null) as Meeting[];
 }

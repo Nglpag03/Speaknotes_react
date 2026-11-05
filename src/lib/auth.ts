@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
 import type { Profile } from './types';
 
-export async function signUp(email: string, password: string, fullName: string) {
+/** Returns true if email confirmation is required (no session yet). */
+export async function signUp(email: string, password: string, fullName: string): Promise<{ needsConfirmation: boolean }> {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -15,11 +16,7 @@ export async function signUp(email: string, password: string, fullName: string) 
   }
 
   // If email confirmation is required, session will be null
-  if (!data.session) {
-    throw new Error('Please check your email to confirm your account before signing in.');
-  }
-
-  return data;
+  return { needsConfirmation: !data.session };
 }
 
 export async function signIn(email: string, password: string) {
@@ -63,7 +60,13 @@ export async function updateFullName(fullName: string) {
 
 export async function resetPassword(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth`,
+    // ✅ Now points to the dedicated reset-password page
+    redirectTo: `${window.location.origin}/reset-password`,
   });
+  if (error) throw error;
+}
+
+export async function updatePassword(newPassword: string) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
 }

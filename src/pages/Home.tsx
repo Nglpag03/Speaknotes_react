@@ -1,402 +1,308 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase';
-import { signOut } from '../lib/auth';
-import { createMeeting, joinMeeting, listMyMeetings } from '../lib/data';
-import type { Meeting } from '../lib/types';
+import { supabase } from '../lib/supabase'
+import { createMeeting, joinMeeting, listMyMeetings, listJoinedMeetings } from '../lib/data'
+import type { Meeting } from '../lib/types'
+import { Icon, MeetingCard, MeetingSkeletons, sortMeetings } from '../components/MeetingCard'
 
-type IconName = 'home' | 'calendar' | 'notes' | 'settings' | 'plus' | 'arrow' | 'logout'
+const VISIBLE_LIMIT = 3
+const CODE_LENGTH = 8
 
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
-    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
-    notes: <><path d="M5 3h11l3 3v15H5z" /><path d="M14 3v5h5M8 12h8M8 16h6" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
-    plus: <path d="M12 5v14M5 12h14" />,
-    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
-    logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M14 3h6a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-6" /></>,
-  }
-
-  return (
-    <svg aria-hidden="true" className="home-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {paths[name]}
-    </svg>
-  )
-}
-
-function BrandMark() {
-  return (
-    <span className="home-brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32">
-        <path d="m8 11.4 8-5 8 5v9.2l-8 5-8-5v-9.2Z" fill="currentColor" opacity=".2" />
-        <path d="m11 13 5-3 5 3v6l-5 3-5-3v-6Z" fill="currentColor" />
-        <path d="M16 10v12m-5-9 10 6m0-6-10 6" fill="none" stroke="white" strokeWidth="1.3" />
-      </svg>
-    </span>
-  )
+function cleanCode(value: string) {
+  return value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, CODE_LENGTH)
 }
 
 export default function Home() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState<string | null>(null)
   const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [joinedMeetings, setJoinedMeetings] = useState<Meeting[]>([])
   const [title, setTitle] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [joinName, setJoinName] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isCreating, setIsCreating] = useState(false)
+  const [isJoining, setIsJoining] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const mounted = useRef(true)
+  const copyTimer = useRef<number | undefined>(undefined)
 
-  // State for the dropdown menu
-  const [showMenu, setShowMenu] = useState(false)
+  const load = useCallback(async () => {
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      const [hosted, joined] = await Promise.all([listMyMeetings(), listJoinedMeetings()])
+      if (!mounted.current) return
+      setMeetings(hosted)
+      setJoinedMeetings(joined)
+    } catch (err) {
+      if (mounted.current) setLoadError(err instanceof Error ? err.message : 'Could not load your meetings.')
+    } finally {
+      if (mounted.current) setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
-
+    mounted.current = true
     ;(async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!mounted.current) return
       if (!user) {
         navigate('/auth', { replace: true })
         return
       }
-
-      if (cancelled) return
-
-      setEmail(user.email ?? null)
-      setJoinName(
-        (user.user_metadata?.full_name as string | undefined) ?? '',
-      )
-
-      try {
-        setMeetings(await listMyMeetings())
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : 'Failed to load meetings',
-        )
-      }
+      setJoinName(user.user_metadata?.full_name ?? '')
+      load()
     })()
-
     return () => {
-      cancelled = true
+      mounted.current = false
+      window.clearTimeout(copyTimer.current)
     }
-  }, [navigate])
+  }, [navigate, load])
 
-  // Close the dropdown when clicking outside
+  // Press "N" to jump to the title field. (Cmd/Ctrl+N is reserved by browsers and can't be overridden.)
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.user-dropdown-wrapper')) {
-        setShowMenu(false);
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement
+      if (el.matches('input, textarea, select, [contenteditable="true"]')) return
+      e.preventDefault()
+      document.getElementById('meeting-title')?.focus()
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const handleCopy = useCallback(async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id)
+      setCopiedId(id)
+      window.clearTimeout(copyTimer.current)
+      copyTimer.current = window.setTimeout(() => setCopiedId(null), 2000)
+    } catch {
+      setError('Couldn’t copy automatically. Select the code and copy it manually.')
+    }
+  }, [])
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isCreating) return
     setError(null)
-    setBusy(true)
-
+    setIsCreating(true)
     try {
-      const code = await createMeeting(title || undefined)
+      const code = await createMeeting(title.trim() || undefined)
       navigate(`/host/${code}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create failed')
-    } finally {
-      setBusy(false)
+      setError(err instanceof Error ? err.message : 'Couldn’t create the meeting. Try again.')
+      setIsCreating(false)
     }
   }
 
   async function onJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isJoining) return
     setError(null)
-    setBusy(true)
-
+    setIsJoining(true)
     try {
-      const normalizedCode = joinCode.trim().toUpperCase()
-      await joinMeeting(normalizedCode, joinName)
-      navigate(`/join/${normalizedCode}`)
+      await joinMeeting(joinCode, joinName.trim())
+      navigate(`/join/${joinCode}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Join failed')
-    } finally {
-      setBusy(false)
+      setError(err instanceof Error ? err.message : 'Couldn’t join. Check the code and try again.')
+      setIsJoining(false)
     }
   }
 
-  async function onSignOut() {
-    await signOut()
-    navigate('/auth', { replace: true })
-  }
+  const sortedHosted = useMemo(() => sortMeetings(meetings), [meetings])
+  const liveMeeting = sortedHosted.find((m) => m.status === 'active')
+  const visibleHosted = sortedHosted.slice(0, VISIBLE_LIMIT)
+  const visibleJoined = joinedMeetings.slice(0, VISIBLE_LIMIT)
 
-  const displayName = joinName.trim() || email?.split('@')[0] || 'there'
-  const initials = displayName.slice(0, 2).toUpperCase()
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName = joinName.trim().split(' ')[0]
+  const canJoin = joinCode.length >= 4 && joinName.trim().length > 0
 
   return (
-    <div className="home-layout">
-      <aside className="home-sidebar">
-        <button className="home-brand" type="button" onClick={() => navigate('/home')}>
-          <BrandMark />
-          <span>SpeakNote</span>
-        </button>
+    <>
+      <header className="home-topbar">
+        <div>
+          <h1>{greeting}{firstName ? `, ${firstName}` : ''}</h1>
+          <p>Start a meeting or join one with a code.</p>
+        </div>
+      </header>
 
-        <nav className="home-nav" aria-label="Primary navigation">
-          <button className="active" type="button">
-            <Icon name="home" />
-            <span>Overview</span>
-          </button>
-          <button type="button">
-            <Icon name="calendar" />
-            <span>Meetings</span>
-          </button>
-          <button type="button">
-            <Icon name="notes" />
-            <span>Notes</span>
-          </button>
-        </nav>
+      {error && (
+        <div className="home-error" role="alert">
+          <strong>Something went wrong</strong>
+          <span>{error}</span>
+          <button type="button" aria-label="Dismiss error" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
-        <div className="home-sidebar-bottom">
-          <button type="button">
-            <Icon name="settings" />
-            <span>Settings</span>
+      {liveMeeting && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '24px', 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          zIndex: 100,
+          background: '#1e293b', 
+          color: '#fff',
+          padding: '8px 16px', 
+          borderRadius: '24px',
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '12px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+          animation: 'slideDown 0.3s ease'
+        }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 1.5s infinite' }} />
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>
+            You have a live meeting: <strong>{liveMeeting.title || 'Untitled'}</strong>
+          </span>
+          <button 
+            onClick={() => navigate(`/host/${liveMeeting.id}`)}
+            style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '4px 12px', borderRadius: '12px', fontSize: '12px', cursor: 'pointer' }}
+          >
+            Resume
           </button>
-          
-          {/* DESKTOP USER DROPDOWN */}
-          <div className="user-dropdown-wrapper">
-            {showMenu && (
-              <div className="user-dropdown-menu">
-                <button type="button" onClick={onSignOut}>
-                  <Icon name="logout" />
-                  Sign out
-                </button>
-              </div>
-            )}
-            <button 
-              className="home-user" 
-              type="button" 
-              onClick={() => setShowMenu(!showMenu)}
-            >
-              <span className="home-avatar">{initials}</span>
-              <span className="home-user-copy">
-                <strong>{displayName}</strong>
-                <small>{email ?? 'Loading account…'}</small>
-              </span>
+          <style>{`@keyframes slideDown { from { top: -50px; opacity: 0; } to { top: 24px; opacity: 1; } }`}</style>
+        </div>
+      )}
+
+      <section className="meeting-actions" aria-label="Meeting actions">
+        <article className="meeting-action-card create-card">
+          <div className="action-icon create"><Icon name="plus" /></div>
+          <div className="action-copy">
+            <h2>Start a new meeting</h2>
+            <p>Create a room, then share the code with everyone joining.</p>
+          </div>
+          <form onSubmit={onCreate}>
+            <label htmlFor="meeting-title">
+              Meeting title <span>Optional · press <kbd>N</kbd> to focus</span>
+            </label>
+            <div className="action-input-row">
+              <input
+                id="meeting-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Weekly product sync"
+                maxLength={80}
+                autoComplete="off"
+              />
+              <button type="submit" disabled={isCreating} aria-busy={isCreating}>
+                {isCreating ? <span className="home-spinner" aria-label="Creating" /> : <><span>Create meeting</span><Icon name="arrow" /></>}
+              </button>
+            </div>
+          </form>
+        </article>
+
+        <article className="meeting-action-card join-card">
+          <div className="action-icon join"><Icon name="arrow" /></div>
+          <div className="action-copy">
+            <h2>Join with a code</h2>
+            <p>Enter the code your host shared with you.</p>
+          </div>
+          <form onSubmit={onJoin}>
+            <div className="join-fields">
+              <label htmlFor="join-code">
+                Meeting code
+                <input
+                  id="join-code"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(cleanCode(e.target.value))}
+                  onPaste={(e) => {
+                    e.preventDefault()
+                    setJoinCode(cleanCode(e.clipboardData.getData('text')))
+                  }}
+                  placeholder="ABCD1234"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  required
+                />
+              </label>
+              <label htmlFor="join-name">
+                Display name
+                <input
+                  id="join-name"
+                  value={joinName}
+                  onChange={(e) => setJoinName(e.target.value)}
+                  placeholder="Your name"
+                  autoComplete="name"
+                  required
+                />
+              </label>
+            </div>
+            <button className="join-submit" type="submit" disabled={isJoining || !canJoin} aria-busy={isJoining}>
+              {isJoining ? <span className="home-spinner dark" aria-label="Joining" /> : <><span>Join meeting</span><Icon name="arrow" /></>}
+            </button>
+          </form>
+        </article>
+      </section>
+
+      <section className="recent-meetings" aria-labelledby="hosted-heading">
+        <div className="section-title-row">
+          <h2 id="hosted-heading">Your meetings</h2>
+          {meetings.length > VISIBLE_LIMIT && (
+            <button type="button" onClick={() => navigate('/meetings?tab=hosted')}>
+              View all {meetings.length} <Icon name="arrow" />
+            </button>
+          )}
+        </div>
+
+        {loadError ? (
+          <div className="home-error" role="alert">
+            <strong>Couldn’t load your meetings</strong>
+            <span>{loadError}</span>
+            <button type="button" className="retry-btn" onClick={load}>
+              <Icon name="refresh" /> Retry
             </button>
           </div>
-          
-        </div>
-      </aside>
-
-      <main className="home-main">
-        
-        <div className="mobile-brand-header">
-          <BrandMark />
-          <span>SpeakNote</span>
-        </div>
-
-        <header className="home-topbar">
-          <div>
-            <span className="home-kicker">WORKSPACE</span>
-            <h1>Good morning, {displayName}</h1>
-            <p>Ready to turn today’s conversations into clear notes?</p>
-          </div>
-          <div className="home-topbar-actions">
-            <span className="home-status"><i /> All systems operational</span>
-            
-            {/* MOBILE USER DROPDOWN */}
-            <div className="user-dropdown-wrapper mobile-wrapper">
-              {showMenu && (
-                <div className="user-dropdown-menu mobile-menu">
-                  <button type="button" onClick={onSignOut}>
-                    <Icon name="logout" />
-                    Sign out
-                  </button>
-                </div>
-              )}
-              <button 
-                className="home-avatar mobile-avatar" 
-                onClick={() => setShowMenu(!showMenu)}
-              >
-                {initials}
-              </button>
+        ) : isLoading ? (
+          <MeetingSkeletons />
+        ) : meetings.length === 0 ? (
+          <div className="meetings-empty">
+            <div className="empty-illustration" aria-hidden="true">
+              <span className="empty-wave one" />
+              <span className="empty-wave two" />
+              <span className="empty-wave three" />
             </div>
-
-          </div>
-        </header>
-
-        {error && (
-          <div className="home-error" role="alert">
-            <strong>Something went wrong</strong>
-            <span>{error}</span>
-            <button type="button" aria-label="Dismiss error" onClick={() => setError(null)}>×</button>
-          </div>
-        )}
-
-        <section className="meeting-actions" aria-label="Meeting actions">
-          <article className="meeting-action-card create-card">
-            <span className="action-number">01</span>
-            <div className="action-icon create">
-              <Icon name="plus" />
-            </div>
-            <div className="action-copy">
-              <h2>Start a new meeting</h2>
-              <p>Create a room and invite others with a simple code.</p>
-            </div>
-            <form onSubmit={onCreate}>
-              <label htmlFor="meeting-title">Meeting title <span>Optional</span></label>
-              <div className="action-input-row">
-                <input
-                  id="meeting-title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="e.g. Weekly product sync"
-                />
-                <button type="submit" disabled={busy}>
-                  {busy ? <span className="home-spinner" /> : <><span>Create meeting</span><Icon name="arrow" /></>}
-                </button>
-              </div>
-            </form>
-          </article>
-
-          <article className="meeting-action-card join-card">
-            <span className="action-number">02</span>
-            <div className="action-icon join">
-              <Icon name="arrow" />
-            </div>
-            <div className="action-copy">
-              <h2>Join with a code</h2>
-              <p>Enter the code shared by your meeting host.</p>
-            </div>
-            <form onSubmit={onJoin}>
-              <div className="join-fields">
-                <label htmlFor="join-code">
-                  Meeting code
-                  <input
-                    id="join-code"
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                    maxLength={8}
-                    placeholder="ABCD1234"
-                    required
-                  />
-                </label>
-                <label htmlFor="join-name">
-                  Display name
-                  <input
-                    id="join-name"
-                    value={joinName}
-                    onChange={(event) => setJoinName(event.target.value)}
-                    placeholder="Your name"
-                    required
-                  />
-                </label>
-              </div>
-              <button className="join-submit" type="submit" disabled={busy}>
-                {busy ? <span className="home-spinner dark" /> : <><span>Join meeting</span><Icon name="arrow" /></>}
-              </button>
-            </form>
-          </article>
-        </section>
-
-        <section className="recent-meetings">
-          <div className="section-title-row">
             <div>
-              <span className="home-kicker">RECENT ACTIVITY</span>
-              <h2>Your hosted meetings</h2>
+              <h3>No meetings yet</h3>
+              <p>Meetings you host will show up here with their transcript and notes.</p>
             </div>
-            {meetings.length > 0 && <button type="button">View all <Icon name="arrow" /></button>}
+            <button type="button" onClick={() => document.getElementById('meeting-title')?.focus()}>
+              <Icon name="plus" /> Start a meeting
+            </button>
           </div>
+        ) : (
+          <ul className="mtg-grid">
+            {visibleHosted.map((m, i) => (
+              <MeetingCard key={m.id} meeting={m} index={i} isHost copiedId={copiedId} onCopy={handleCopy} navigate={navigate} />
+            ))}
+          </ul>
+        )}
+      </section>
 
-          {meetings.length === 0 ? (
-            <div className="meetings-empty">
-              <div className="empty-illustration">
-                <span className="empty-wave one" />
-                <span className="empty-wave two" />
-                <span className="empty-wave three" />
-              </div>
-              <div>
-                <h3>Your meeting history starts here</h3>
-                <p>Create your first meeting and it will appear in this space.</p>
-              </div>
-              <button type="button" onClick={() => document.getElementById('meeting-title')?.focus()}>
-                <Icon name="plus" />
-                Create a meeting
+      {!isLoading && !loadError && joinedMeetings.length > 0 && (
+        <section className="recent-meetings" aria-labelledby="joined-heading">
+          <div className="section-title-row">
+            <h2 id="joined-heading">Recently joined</h2>
+            {joinedMeetings.length > VISIBLE_LIMIT && (
+              <button type="button" onClick={() => navigate('/meetings?tab=joined')}>
+                View all {joinedMeetings.length} <Icon name="arrow" />
               </button>
-            </div>
-          ) : (
-            <div className="meeting-table">
-              <div className="meeting-table-head">
-                <span>Meeting</span>
-                <span>Code</span>
-                <span>Status</span>
-                <span />
-              </div>
-              {meetings.map((meeting, index) => (
-                <button
-                  className="meeting-row"
-                  type="button"
-                  key={meeting.id}
-                  onClick={() => navigate(`/host/${meeting.id}`)}
-                >
-                  <span className={`meeting-color color-${index % 4}`} />
-                  <span className="meeting-name">
-                    <strong>{meeting.title ?? 'Untitled meeting'}</strong>
-                    <small>Hosted by you</small>
-                  </span>
-                  <code>{meeting.id}</code>
-                  // Inside your meetings.map()
-<code 
-  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-  onClick={(e) => {
-    e.stopPropagation(); // Prevent navigating to the meeting
-    navigator.clipboard.writeText(meeting.id);
-    alert('Code copied to clipboard!');
-  }}
-  title="Click to copy code"
->
-  {meeting.id}
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-  </svg>
-</code>
-                  <span className={`meeting-state ${meeting.status?.toLowerCase()}`}>
-                    <i />
-                    {meeting.status}
-                  </span>
-                  <span className="row-arrow"><Icon name="arrow" /></span>
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
+          <ul className="mtg-grid">
+            {visibleJoined.map((m, i) => (
+              <MeetingCard key={m.id} meeting={m} index={i} isHost={false} copiedId={copiedId} onCopy={handleCopy} navigate={navigate} />
+            ))}
+          </ul>
         </section>
-
-        <nav className="mobile-nav">
-          <button className="active" type="button">
-            <Icon name="home" />
-            <span>Home</span>
-          </button>
-          <button type="button">
-            <Icon name="calendar" />
-            <span>Meetings</span>
-          </button>
-          <button type="button">
-            <Icon name="notes" />
-            <span>Notes</span>
-          </button>
-          {/* We can remove Sign out from bottom nav since it's now in the avatar dropdown */}
-          <button type="button" onClick={() => setShowMenu(true)}>
-            <Icon name="settings" />
-            <span>Profile</span>
-          </button>
-        </nav>
-
-      </main>
-    </div>
+      )}
+    </>
   )
 }
