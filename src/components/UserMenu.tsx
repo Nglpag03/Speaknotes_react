@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { avatarColor, fetchSettings, getInitials, SETTINGS_EVENT } from '../lib/settings'
@@ -36,7 +37,7 @@ export function UserMenu({ variant = 'sidebar' }: { variant?: 'sidebar' | 'mobil
       try {
         const s = await fetchSettings()
         if (alive) setColor(s.avatar_color)
-      } catch { /* avatar falls back to a derived colour */ }
+      } catch { /* avatar falls back to derived color */ }
     }
     load()
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
@@ -128,10 +129,20 @@ export function UserMenu({ variant = 'sidebar' }: { variant?: 'sidebar' | 'mobil
         </button>
       </div>
 
-      {/* SIGN OUT CONFIRMATION MODAL */}
-      {showSignOutConfirm && (
-        <div className="end-dialog-backdrop" role="presentation" onClick={() => !signingOut && setShowSignOutConfirm(false)}>
-          <div className="end-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" onClick={(e) => e.stopPropagation()}>
+      {/* SIGN OUT CONFIRMATION MODAL — rendered via portal at body level */}
+      {showSignOutConfirm && createPortal(
+        <div
+          className="end-dialog-backdrop"
+          role="presentation"
+          onClick={() => !signingOut && setShowSignOutConfirm(false)}
+        >
+          <div
+            className="end-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="signout-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <span className="end-dialog-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 17l5-5-5-5M15 12H3" />
@@ -149,7 +160,8 @@ export function UserMenu({ variant = 'sidebar' }: { variant?: 'sidebar' | 'mobil
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

@@ -5016,3 +5016,87 @@ kbd {
   color: #15803d;
   background: #f0fdf4;
 }
+
+
+/* ============================================
+   JOIN CARD OVERRIDES
+   (create-card rules stay for the dark card)
+   ============================================ */
+
+/* White card needs dark text for the description */
+.join-card .action-copy p {
+  color: #64748b;
+}
+
+/* White card needs dark labels */
+.join-card label {
+  color: #37413f;
+}
+
+/* The "Optional" hint inside the join card (if you add one) */
+.join-card label > span {
+  color: #94a3b8;
+}
+
+/* Inputs need dark text + visible placeholder */
+.join-card input {
+  background: #f8f9f7;
+  border-color: #daddd8;
+  color: #1e2927;
+}
+
+.join-card input::placeholder {
+  color: #a8aeac;
+}
+
+
+/* ============================================
+   SIGN OUT / END MEETING MODAL FIX
+   Ensures text is dark on the white modal background
+   ============================================ */
+
+.end-dialog h2 {
+  color: #1e2f2a;
+  font-family: 'Manrope', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.end-dialog p {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 auto 20px;
+  max-width: 320px;
+}
+
+/* Ensure modal buttons have readable text */
+.end-dialog button:first-child {
+  color: #37413f;
+  background: #ffffff;
+  border: 1px solid #dfe3df;
+  font-weight: 600;
+}
+
+.end-dialog button:first-child:hover:not(:disabled) {
+  background: #f7f9f7;
+  border-color: #cbd5d1;
+}
+
+.end-dialog button:last-child {
+  color: #ffffff;
+  background: #ad5143;
+  border: 1px solid #ad5143;
+  font-weight: 600;
+}
+
+.end-dialog button:last-child:hover:not(:disabled) {
+  background: #964437;
+  border-color: #964437;
+}
+
+.end-dialog button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
