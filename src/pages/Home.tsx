@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { createMeeting, joinMeeting, listMyMeetings, listJoinedMeetings } from '../lib/data'
+import { createMeeting, joinMeeting, listMyMeetings, listJoinedMeetings, deleteMeeting } from '../lib/data'
 import type { Meeting } from '../lib/types'
 import { Icon, MeetingCard, MeetingSkeletons, sortMeetings } from '../components/MeetingCard'
 
@@ -27,6 +27,9 @@ export default function Home() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const mounted = useRef(true)
   const copyTimer = useRef<number | undefined>(undefined)
+
+  const [meetingToDelete, setMeetingToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -98,6 +101,24 @@ export default function Home() {
       setIsCreating(false)
     }
   }
+
+  async function handleDelete() {
+  if (!meetingToDelete) return
+  setIsDeleting(true)
+  try {
+    await deleteMeeting(meetingToDelete)
+    
+    // Remove from UI immediately without reloading
+    setMeetings((current) => current.filter((m) => m.id !== meetingToDelete))
+    setJoinedMeetings((current) => current.filter((m) => m.id !== meetingToDelete))
+    
+    setMeetingToDelete(null)
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to delete meeting')
+  } finally {
+    setIsDeleting(false)
+  }
+}
 
   async function onJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -280,7 +301,16 @@ export default function Home() {
         ) : (
           <ul className="mtg-grid">
             {visibleHosted.map((m, i) => (
-              <MeetingCard key={m.id} meeting={m} index={i} isHost copiedId={copiedId} onCopy={handleCopy} navigate={navigate} />
+              <MeetingCard 
+              key={m.id} 
+              meeting={m} 
+              index={i} 
+              isHost 
+              copiedId={copiedId} 
+              onCopy={handleCopy} 
+              navigate={navigate} 
+              onDelete={(id) => setMeetingToDelete(id)} 
+            />
             ))}
           </ul>
         )}
@@ -303,6 +333,29 @@ export default function Home() {
           </ul>
         </section>
       )}
+
+      {meetingToDelete && (
+  <div className="end-dialog-backdrop" role="presentation">
+    <div className="end-dialog" role="alertdialog" aria-modal="true">
+      <span className="end-dialog-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+        </svg>
+      </span>
+      <h2>Delete this meeting?</h2>
+      <p>This will permanently delete the meeting, its transcript, and the AI minutes. This action cannot be undone.</p>
+      <div>
+        <button type="button" onClick={() => setMeetingToDelete(null)} disabled={isDeleting}>
+          Cancel
+        </button>
+        <button type="button" onClick={handleDelete} disabled={isDeleting} style={{ background: '#ad5143', borderColor: '#ad5143', color: '#fff' }}>
+          {isDeleting ? 'Deleting…' : 'Delete meeting'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </>
   )
 }

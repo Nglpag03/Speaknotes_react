@@ -4,7 +4,7 @@ import type { Meeting } from '../lib/types'
 export type IconName =
   | 'home' | 'calendar' | 'settings' | 'plus'
   | 'arrow' | 'logout' | 'copy' | 'check'
-  | 'search' | 'x' | 'refresh'
+  | 'search' | 'x' | 'refresh' | 'trash'
 
 export function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -17,6 +17,7 @@ export function Icon({ name }: { name: IconName }) {
     copy: <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></>,
     check: <polyline points="20 6 9 17 4 12"></polyline>,
     search: <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>,
+    trash: <><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></>,
     x: <path d="M18 6 6 18M6 6l12 12" />,
     refresh: <><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></>,
   }
@@ -80,6 +81,10 @@ export function MeetingCard({
   onCopy,
   navigate,
   isHost,
+  onDelete,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   meeting: Meeting
   index: number
@@ -87,13 +92,22 @@ export function MeetingCard({
   onCopy: (id: string) => void
   navigate: (path: string) => void
   isHost: boolean
+  onDelete?: (id: string) => void
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }) {
-  // ✅ FIX: Route correctly based on both role and status
   const targetPath = isHost
     ? (meeting.status === 'active' ? `/host/${meeting.id}` : `/meeting/${meeting.id}`)
     : (meeting.status === 'active' ? `/join/${meeting.id}` : `/meeting/${meeting.id}`);
 
-  const handleCardClick = () => navigate(targetPath)
+  const handleCardClick = () => {
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect(meeting.id)
+    } else {
+      navigate(targetPath)
+    }
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -104,7 +118,7 @@ export function MeetingCard({
 
   return (
     <div
-      className={`bento-card ${meeting.status === 'active' ? 'active' : ''}`}
+      className={`bento-card ${meeting.status === 'active' ? 'active' : ''} ${selected ? 'selected' : ''}`}
       onClick={handleCardClick}
       onKeyDown={handleKeyDown}
       role="button"
@@ -112,11 +126,46 @@ export function MeetingCard({
       aria-label={`Open meeting ${meeting.title ?? meeting.id}`}
     >
       <div className="bento-header">
-        <span className={`bento-color color-${index % 4}`} />
-        <span className={`meeting-state ${meeting.status?.toLowerCase()}`}>
-          <i />
-          {meeting.status === 'active' ? 'Live Now' : 'Ended'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {selectionMode ? (
+            <span
+              className={`checkbox ${selected ? 'checked' : ''}`}
+              aria-hidden="true"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleSelect?.(meeting.id)
+              }}
+            >
+              {selected && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </span>
+          ) : (
+            <span className={`bento-color color-${index % 4}`} />
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className={`meeting-state ${meeting.status?.toLowerCase()}`}>
+            <i />
+            {meeting.status === 'active' ? 'Live Now' : 'Ended'}
+          </span>
+          {isHost && onDelete && !selectionMode && (
+            <button
+              type="button"
+              className="delete-btn"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                onDelete(meeting.id); 
+              }}
+              title="Delete meeting"
+              aria-label="Delete meeting"
+            >
+              <Icon name="trash" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div>
@@ -130,17 +179,21 @@ export function MeetingCard({
       <div className="bento-footer">
         <span className="bento-code">{meeting.id}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            className={`copy-btn ${copiedId === meeting.id ? 'copied' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onCopy(meeting.id); }}
-            title="Click to copy code"
-          >
-            {copiedId === meeting.id ? <Icon name="check" /> : <Icon name="copy" />}
-          </button>
-          <span className="bento-open">
-            Open <Icon name="arrow" />
-          </span>
+          {!selectionMode && (
+            <>
+              <button
+                type="button"
+                className={`copy-btn ${copiedId === meeting.id ? 'copied' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onCopy(meeting.id) }}
+                title="Click to copy code"
+              >
+                {copiedId === meeting.id ? <Icon name="check" /> : <Icon name="copy" />}
+              </button>
+              <span className="bento-open">
+                Open <Icon name="arrow" />
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { listMyMeetings, listJoinedMeetings } from '../lib/data'
+import { listMyMeetings, listJoinedMeetings, deleteMeeting, deleteMeetings } from '../lib/data'
 import type { Meeting } from '../lib/types'
 import { Icon, MeetingCard, MeetingSkeletons, sortMeetings, useCopyCode } from '../components/MeetingCard'
 
@@ -45,6 +45,52 @@ export default function Meetings() {
 
   const { copiedId, copy } = useCopyCode(setCopyError)
 
+  const [meetingToDelete, setMeetingToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+function toggleSelection(id: string) {
+  setSelectedIds((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
+
+function enterSelectionMode() {
+  setSelectionMode(true)
+  setSelectedIds(new Set())
+}
+
+function exitSelectionMode() {
+  setSelectionMode(false)
+  setSelectedIds(new Set())
+}
+
+function selectAll() {
+  const ids = results.map((m) => m.id)
+  setSelectedIds(new Set(ids))
+}
+
+async function handleBulkDelete() {
+  if (selectedIds.size === 0) return
+  setBulkDeleting(true)
+  try {
+    await deleteMeetings(Array.from(selectedIds))
+    setHosted((current) => current.filter((m) => !selectedIds.has(m.id)))
+    setJoined((current) => current.filter((m) => !selectedIds.has(m.id)))
+    exitSelectionMode()
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to delete meetings')
+  } finally {
+    setBulkDeleting(false)
+  }
+}
+
   // 1. Debounce the search input (prevents lag on every keystroke)
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 250)
@@ -65,6 +111,24 @@ export default function Meetings() {
       if (mounted.current) setLoading(false)
     }
   }, [])
+
+  async function handleDelete() {
+    if (!meetingToDelete) return
+    setIsDeleting(true)
+    try {
+      await deleteMeeting(meetingToDelete)
+      
+      // ✅ Remove from UI immediately
+      setHosted((current) => current.filter((m) => m.id !== meetingToDelete))
+      setJoined((current) => current.filter((m) => m.id !== meetingToDelete))
+      
+      setMeetingToDelete(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete meeting')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   useEffect(() => {
     mounted.current = true
@@ -159,6 +223,21 @@ export default function Meetings() {
             </button>
           )}
         </div>
+
+        {!selectionMode ? (
+          <button type="button" className="btn-secondary" onClick={enterSelectionMode} disabled={loading || source.length === 0}>
+            Select
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button type="button" className="btn-secondary" onClick={selectAll}>
+              Select all ({source.length})
+            </button>
+            <button type="button" className="btn-secondary" onClick={exitSelectionMode}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="filter-row">
@@ -219,21 +298,66 @@ export default function Meetings() {
         ) : (
           <ul className="bento-grid" style={{ animation: 'fadeIn 0.3s ease' }}>
             {results.map((m, i) => (
-              <MeetingCard
-                key={m.id}
-                meeting={m}
-                index={i}
-                isHost={tab === 'hosted'}
-                copiedId={copiedId}
-                onCopy={copy}
-                navigate={navigate}
-              />
+            <MeetingCard
+              key={m.id}
+              meeting={m}
+              index={i}
+              isHost={tab === 'hosted'}
+              copiedId={copiedId}
+              onCopy={copy}
+              navigate={navigate}
+              onDelete={(id) => setMeetingToDelete(id)}
+              selectionMode={selectionMode}
+              selected={selectedIds.has(m.id)}
+              onToggleSelect={toggleSelection}
+            />
             ))}
           </ul>
         )}
       </div>
-      
+      {meetingToDelete && (
+  <div className="end-dialog-backdrop" role="presentation">
+    <div className="end-dialog" role="alertdialog" aria-modal="true">
+      <span className="end-dialog-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+        </svg>
+      </span>
+      <h2>Delete this meeting?</h2>
+      <p>This will permanently delete the meeting, its transcript, and the AI minutes. This action cannot be undone.</p>
+      <div>
+        <button type="button" onClick={() => setMeetingToDelete(null)} disabled={isDeleting}>
+          Cancel
+        </button>
+        <button type="button" onClick={handleDelete} disabled={isDeleting} style={{ background: '#ad5143', borderColor: '#ad5143', color: '#fff' }}>
+          {isDeleting ? 'Deleting…' : 'Delete meeting'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
+
+      {selectionMode && selectedIds.size > 0 && (
+  <div className="bulk-action-bar">
+    <span><strong>{selectedIds.size}</strong> selected</span>
+    <div style={{ display: 'flex', gap: '8px' }}>
+      <button type="button" className="btn-secondary" onClick={exitSelectionMode} disabled={bulkDeleting}>
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="btn-danger solid"
+        onClick={handleBulkDelete}
+        disabled={bulkDeleting}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+      >
+        <Icon name="trash" />
+        {bulkDeleting ? 'Deleting…' : `Delete (${selectedIds.size})`}
+      </button>
+    </div>
+  </div>
+)}
     </>
   )
 }

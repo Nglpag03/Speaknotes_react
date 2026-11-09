@@ -5110,3 +5110,172 @@ kbd {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* ============================================
+   PREMIUM ACTION BUTTONS
+   ============================================ */
+
+/* Base for both */
+.btn-primary, .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+/* Primary (Download Minutes) - Filled green */
+.btn-primary {
+  background: #31685c;
+  color: #ffffff;
+  border: 1px solid #31685c;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #28594e;
+  border-color: #28594e;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(49, 104, 92, 0.25);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Secondary (Export Transcript) - Outlined */
+.btn-secondary {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #daddd8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #f8faf9;
+  color: #1e2927;
+  border-color: #cbd5e1;
+}
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Disabled state */
+.btn-primary:disabled, .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ============================================
+   DELETE + BULK SELECT SYSTEM
+   ============================================ */
+
+/* Delete button on cards — always visible on mobile, hover on desktop */
+.delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 1; /* Always visible by default */
+}
+
+.delete-btn:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.delete-btn .home-icon {
+  height: 14px;
+  width: 14px;
+}
+
+/* On desktop only, hide until hover */
+@media (min-width: 641px) {
+  .delete-btn {
+    opacity: 0;
+  }
+  .bento-card:hover .delete-btn,
+  .delete-btn:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* Selected card state */
+.bento-card.selected {
+  border-color: #3e7367;
+  background: #f0f8f6;
+  box-shadow: 0 0 0 3px rgba(62, 115, 103, 0.12);
+}
+
+/* Checkbox (in selection mode) */
+.checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fff;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.checkbox.checked {
+  background: #31685c;
+  border-color: #31685c;
+}
+
+/* Bulk action floating bar */
+.bulk-action-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #ffffff;
+  border: 1px solid #dfe5e1;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
+  animation: slideUp 0.25s ease;
+}
+
+.bulk-action-bar span {
+  font-size: 13px;
+  color: #475569;
+}
+
+.bulk-action-bar strong {
+  color: #1e2f2a;
+  font-weight: 700;
+}
+
+@keyframes slideUp {
+  from { transform: translate(-50%, 30px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* Make bulk bar sit above mobile nav */
+@media (max-width: 640px) {
+  .bulk-action-bar {
+    bottom: 80px;
+  }
+}

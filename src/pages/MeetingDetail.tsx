@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getMeeting, listParticipants, listTranscripts, getMinutes, requestSummary } from '../lib/data'
+import { getMeeting, listParticipants, listTranscripts, getMinutes, requestSummary, deleteMeeting } from '../lib/data'
 import { exportMinutesPdf, exportTranscriptPdf } from '../lib/pdf'
 import type { Meeting, Participant, TranscriptRow, Minutes } from '../lib/types'
 import { FormalMinutes } from '../components/FormalMinutes'
@@ -21,6 +21,21 @@ export default function MeetingDetail() {
   const [venue, setVenue] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  async function handleDelete() {
+  if (!code) return
+  setIsDeleting(true)
+  try {
+    await deleteMeeting(code)
+    navigate('/meetings?tab=hosted')
+  } catch (err) {
+    console.error(err)
+    setIsDeleting(false)
+  }
+}
 
   useEffect(() => {
     if (!code) return
@@ -98,8 +113,32 @@ export default function MeetingDetail() {
           <h1>{meeting.title ?? 'Untitled meeting'}</h1>
           <p>{new Date(meeting.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · {durationMin} min</p>
         </div>
-        <div className="home-topbar-actions">
-          <button className="host-export-button" onClick={() => exportTranscriptPdf(meeting, transcripts)} disabled={transcripts.length === 0} style={{ opacity: transcripts.length === 0 ? 0.5 : 1, cursor: transcripts.length === 0 ? 'not-allowed' : 'pointer' }}>Export transcript</button>
+        <div className="home-topbar-actions" style={{ gap: '8px' }}>
+          <button 
+            className="btn-secondary" 
+            onClick={() => exportTranscriptPdf(meeting, transcripts)} 
+            disabled={transcripts.length === 0} 
+            style={{ 
+              opacity: transcripts.length === 0 ? 0.5 : 1, 
+              cursor: transcripts.length === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></svg>
+            Export transcript
+          </button>
+          <button
+            className="btn-danger"
+            onClick={() => setShowDeleteConfirm(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+            Delete
+          </button>
         </div>
       </header>
 
@@ -145,22 +184,31 @@ export default function MeetingDetail() {
         </aside>
       </div>
 
-<div ref={minutesRef}>
-  {minutes ? (
-    <section style={{ marginTop: '48px', animation: 'fadeIn 0.4s ease' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h2 style={{ fontSize: '18px', fontFamily: 'Manrope, sans-serif', margin: 0 }}>Official Minutes</h2>
-        <button className="host-export-button" onClick={() => exportMinutesPdf(meeting, minutes)} style={{ padding: '8px 14px', height: '36px', borderRadius: '8px' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></svg>
-          Download minutes
-        </button>
-      </div>
-      <FormalMinutes meeting={meeting} minutes={minutes} />
-      <div className="minutes-document" style={{ padding: 0, marginTop: '24px' }}>
-        <section className="minutes-summary"><div><h3>Meeting summary</h3><p>{minutes.content.summary}</p></div></section>
-      </div>
-    </section>
-  ) : (
+     <div ref={minutesRef}>
+        {minutes ? (
+          <section style={{ marginTop: '48px', animation: 'fadeIn 0.4s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontFamily: 'Manrope, sans-serif', margin: 0 }}>Official Minutes</h2>
+              <button 
+                className="btn-primary" 
+                onClick={() => exportMinutesPdf(meeting, minutes)} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(49, 104, 92, 0.2)'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></svg>
+                Download minutes
+              </button>
+            </div>
+            <FormalMinutes meeting={meeting} minutes={minutes} />
+            <div className="minutes-document" style={{ padding: 0, marginTop: '24px' }}>
+              <section className="minutes-summary"><div><h3>Meeting summary</h3><p>{minutes.content.summary}</p></div></section>
+            </div>
+          </section>
+        ) : (
     <section className="minutes-empty" style={{ marginTop: '48px', position: 'relative', overflow: 'hidden', background: '#fff', borderRadius: '13px', border: '1px solid #e2e5e1', animation: 'fadeIn 0.4s ease' }}>
       
       {/* When generating: show a premium loading experience */}
@@ -256,6 +304,28 @@ export default function MeetingDetail() {
                 disabled={isGenerating || !venue.trim()}
               >
                 {isGenerating ? 'Generating…' : 'Generate Notes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {showDeleteConfirm && (
+        <div className="end-dialog-backdrop" role="presentation">
+          <div className="end-dialog" role="alertdialog" aria-modal="true">
+            <span className="end-dialog-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+              </svg>
+            </span>
+            <h2>Delete this meeting?</h2>
+            <p>This will permanently delete the meeting, its transcript, and the AI minutes. This action cannot be undone.</p>
+            <div>
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleDelete} disabled={isDeleting} style={{ background: '#ad5143', borderColor: '#ad5143', color: '#fff' }}>
+                {isDeleting ? 'Deleting…' : 'Delete meeting'}
               </button>
             </div>
           </div>

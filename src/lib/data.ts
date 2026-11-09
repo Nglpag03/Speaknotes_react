@@ -251,3 +251,39 @@ export async function listJoinedMeetings(): Promise<Meeting[]> {
     .map((row: any) => row.meetings)
     .filter((m: any) => m !== null) as Meeting[];
 }
+
+export async function deleteMeeting(code: string): Promise<void> {
+  const { data, error, status } = await supabase
+    .from('meetings')
+    .delete()
+    .eq('id', code)
+    .select(); // Add .select() to see what was returned
+
+  if (error) {
+    console.error("🚨 FULL ERROR DETAILS:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      status: status
+    });
+    throw new Error(error.message || `Status ${status}: Failed to delete meeting`);
+  }
+
+  if (!data || data.length === 0) {
+    // If no error, but nothing was deleted, it means the RLS blocked it silently
+    throw new Error('Delete failed: You do not have permission, or the meeting was not found.');
+  }
+}
+
+export async function deleteMeetings(codes: string[]): Promise<void> {
+  if (codes.length === 0) return
+  const { error } = await supabase
+    .from('meetings')
+    .delete()
+    .in('id', codes)
+  if (error) {
+    console.error("🚨 BULK DELETE ERROR:", error)
+    throw new Error(error.message || 'Failed to delete meetings')
+  }
+}
