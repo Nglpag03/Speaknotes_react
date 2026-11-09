@@ -1,31 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import {
-  endMeeting,
-  getMeeting,
-  getMinutes,
-  listParticipants,
-  listTranscripts,
-  requestSummary,
-} from '../lib/data'
-import { exportMinutesPdf, exportTranscriptPdf } from '../lib/pdf'
-import type { Meeting, Minutes, Participant, TranscriptRow } from '../lib/types'
+import { endMeeting, getMeeting,  listParticipants, listTranscripts } from '../lib/data'
+import { exportTranscriptPdf } from '../lib/pdf'
+import type { Meeting,  Participant, TranscriptRow } from '../lib/types'
 
-// SVG Icon mapping (copied from your file)
-type HostIconName = 'arrow-left' | 'copy' | 'download' | 'spark' | 'users' | 'wave' | 'stop' | 'check' | 'clock' | 'document' | 'close'
+type HostIconName = 'arrow-left' | 'copy' | 'download' | 'users' | 'wave' | 'stop' | 'close'
 function HostIcon({ name }: { name: HostIconName }) {
   const paths: Record<HostIconName, React.ReactNode> = {
     'arrow-left': <path d="m15 18-6-6 6-6" />,
     copy: <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
     download: <><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></>,
-    spark: <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 12 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />,
     users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></>,
     wave: <path d="M3 12h2l2-6 4 12 3-9 3 6 2-3h2" />,
     stop: <rect x="7" y="7" width="10" height="10" rx="1" />,
-    check: <path d="m5 12 4 4L19 6" />,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    document: <><path d="M5 3h11l3 3v15H5z" /><path d="M14 3v5h5M8 12h8M8 16h6" /></>,
     close: <path d="m6 6 12 12M18 6 6 18" />,
   }
   return (
@@ -43,18 +31,15 @@ export default function HostMeeting() {
   const [meeting, setMeeting] = useState<Meeting | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [transcripts, setTranscripts] = useState<TranscriptRow[]>([])
-  const [minutes, setMinutes] = useState<Minutes | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
   const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set())
   const [liveText, setLiveText] = useState('')
+  
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
-  const [activeTab, setActiveTab] = useState<'transcript' | 'minutes'>('transcript')
-  const [isMobileSidebarOpen] = useState(false)
 
-  // 1. Initial Data Fetch
   useEffect(() => {
     if (!code) return
     ;(async () => {
@@ -63,16 +48,11 @@ export default function HostMeeting() {
       setMeeting(currentMeeting)
       setParticipants(await listParticipants(code))
       setTranscripts(await listTranscripts(code))
-      setMinutes(await getMinutes(code))
-    })().catch((err) => {
-      setError(err instanceof Error ? err.message : 'Unable to load meeting')
-    })
+    })().catch((err) => setError(err instanceof Error ? err.message : 'Unable to load meeting'))
   }, [code, navigate])
 
-  // 2. Realtime Subscriptions
   useEffect(() => {
     if (!code || !meeting) return
-
     const pgChannel = supabase.channel(`db-changes-${code}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transcripts', filter: `meeting_id=eq.${code}` }, (payload) => {
         setTranscripts((current) => [...current, payload.new as TranscriptRow])
@@ -111,7 +91,6 @@ export default function HostMeeting() {
     }
   }, [code, meeting])
 
-  // 3. Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [transcripts, liveText])
@@ -120,48 +99,14 @@ export default function HostMeeting() {
     if (!code) return
     setBusy(true)
     setError(null)
-
+    
     try {
-      // 1. Ask for venue
-      const venueInput = window.prompt("Where was this meeting held? (e.g., CICS Faculty Room, Zoom)", "CICS Faculty Room");
-      
-      // If the user clicks cancel, default to N/A
-      const venue = venueInput ? venueInput.trim() : 'N/A';
-
-      // 2. Mark meeting as ended
       await endMeeting(code)
-      setMeeting((current) => current ? { ...current, status: 'ended' } : null)
-
-      // 3. Auto-generate AI minutes with the venue passed in
-      if (transcripts.length > 0) {
-        requestSummary(code, venue).catch(err => {
-          console.error("Background AI generation failed:", err)
-        })
-      }
-
-      // 4. Redirect
-      setShowEndConfirm(false)
-      navigate('/home')
-      
+      navigate(`/meeting/${code}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to end meeting')
-    } finally {
       setBusy(false)
-    }
-  }
-  
-  async function handleSummarize() {
-    if (!code || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      const response = await requestSummary(code)
-      setMinutes(response.minutes)
-      setActiveTab('minutes')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate meeting minutes')
-    } finally {
-      setBusy(false)
+      setShowEndConfirm(false)
     }
   }
 
@@ -190,7 +135,6 @@ export default function HostMeeting() {
           <HostIcon name="arrow-left" />
           <span>Back to home</span>
         </button>
-
         <div className="host-meeting-title">
           <div>
             <span className="host-eyebrow">HOSTING NOW</span>
@@ -200,7 +144,6 @@ export default function HostMeeting() {
             <i />{meeting.status}
           </span>
         </div>
-
         <div className="host-code">
           <span>Meeting code</span>
           <button className="host-code-badge" type="button" onClick={copyCode}>
@@ -225,7 +168,7 @@ export default function HostMeeting() {
       )}
 
       <div className="host-workspace">
-        <aside className={`host-participants ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
+        <aside className="host-participants">
           <div className="host-panel-title">
             <div>
               <span className="host-eyebrow">IN THIS ROOM</span>
@@ -236,7 +179,6 @@ export default function HostMeeting() {
               {onlineUsers.size}/{activeParticipants.length}
             </span>
           </div>
-
           <div className="host-participant-list">
             {participants.length === 0 ? (
               <div className="host-participants-empty">
@@ -249,7 +191,6 @@ export default function HostMeeting() {
                 const isSpeaking = speakingUsers.has(participant.user_id)
                 const name = participant.full_name || 'Guest'
                 const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-
                 return (
                   <div className={`host-participant ${participant.kicked_at ? 'removed' : ''} ${isSpeaking ? 'speaking' : ''}`} key={participant.user_id}>
                     <span className={`host-participant-avatar color-${index % 4}`}>
@@ -266,7 +207,6 @@ export default function HostMeeting() {
               })
             )}
           </div>
-
           <div className="host-participants-foot">
             <span><i /> Online now</span>
             <p>Presence updates automatically as people enter and leave.</p>
@@ -274,107 +214,54 @@ export default function HostMeeting() {
         </aside>
 
         <section className="host-main-panel">
-          <div className="host-tabs" role="tablist">
-            <button className={`host-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')} type="button" role="tab" aria-selected={activeTab === 'transcript'}>
-              <HostIcon name="wave" /> Live transcript {liveText && <i />}
-            </button>
-            <button className={`host-tab ${activeTab === 'minutes' ? 'active' : ''}`} onClick={() => setActiveTab('minutes')} type="button" role="tab" aria-selected={activeTab === 'minutes'}>
-              <HostIcon name="spark" /> AI minutes {minutes && <span><HostIcon name="check" /></span>}
-            </button>
-          </div>
-
-          {/* TRANSCRIPT TAB */}
-          {activeTab === 'transcript' && (
-            <div className="host-transcript-panel">
-              {transcripts.length === 0 && !liveText ? (
-                <div className="transcript-empty">
-                  <span className="transcript-empty-wave"><i /><i /><i /><i /><i /></span>
-                  <h3>Listening for the conversation</h3>
-                  <p>Transcribed speech will appear here in real time.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="transcript-toolbar">
-                    <div>
-                      <span className="transcript-live-label"><i /> Live</span>
-                      <span>{transcripts.length} captured segments</span>
-                    </div>
-                    <button type="button" disabled={transcripts.length === 0} onClick={() => exportTranscriptPdf(meeting, transcripts)}>
-                      <HostIcon name="download" /> Export transcript
-                    </button>
+          <div className="host-transcript-panel">
+            {transcripts.length === 0 && !liveText ? (
+              <div className="transcript-empty">
+                <span className="transcript-empty-wave"><i /><i /><i /><i /><i /></span>
+                <h3>Listening for the conversation</h3>
+                <p>Transcribed speech will appear here in real time.</p>
+              </div>
+            ) : (
+              <>
+                <div className="transcript-toolbar">
+                  <div>
+                    <span className="transcript-live-label"><i /> Live</span>
+                    <span>{transcripts.length} captured segments</span>
                   </div>
-
-                  <div className="host-transcript-feed">
-                    <div className="transcript-entries">
-                      {transcripts.map((transcript, index) => {
-                        const name = transcript.full_name || 'Participant'
-                        const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-                        return (
-                          <article className="transcript-entry" key={transcript.id}>
-                            <span className={`transcript-avatar color-${index % 4}`}>{initials}</span>
-                            <div>
-                              <span className="transcript-meta"><strong>{name}</strong><time>Just now</time></span>
-                              <p>{transcript.content}</p>
-                            </div>
-                          </article>
-                        )
-                      })}
-                      {liveText && (
-                        <article className="transcript-entry live-entry">
-                          <span className="transcript-avatar live"><HostIcon name="wave" /></span>
+                  <button type="button" disabled={transcripts.length === 0} onClick={() => exportTranscriptPdf(meeting, transcripts)}>
+                    <HostIcon name="download" /> Export transcript
+                  </button>
+                </div>
+                <div className="host-transcript-feed">
+                  <div className="transcript-entries">
+                    {transcripts.map((transcript, index) => {
+                      const name = transcript.full_name || 'Participant'
+                      const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+                      return (
+                        <article className="transcript-entry" key={transcript.id}>
+                          <span className={`transcript-avatar color-${index % 4}`}>{initials}</span>
                           <div>
-                            <span className="transcript-meta"><strong>Speaking now</strong><span className="typing-dots"><i /><i /><i /></span></span>
-                            <p>{liveText}</p>
+                            <span className="transcript-meta"><strong>{name}</strong><time>Just now</time></span>
+                            <p>{transcript.content}</p>
                           </div>
                         </article>
-                      )}
-                      <div ref={transcriptEndRef} />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* MINUTES TAB */}
-          {activeTab === 'minutes' && (
-            <div className="host-minutes-panel">
-              {!minutes ? (
-                <div className="minutes-empty">
-                  <span className="minutes-spark"><HostIcon name="spark" /></span>
-                  <h2>Turn this conversation into clear minutes</h2>
-                  <p>SpeakNote will organize the transcript into a summary, decisions, and assigned action items.</p>
-                  <button type="button" onClick={handleSummarize} disabled={busy || transcripts.length === 0} style={{ opacity: (busy || transcripts.length === 0) ? 0.6 : 1, cursor: (busy || transcripts.length === 0) ? 'not-allowed' : 'pointer' }}>
-                    {busy ? <span className="host-spinner" /> : <HostIcon name="spark" />}
-                    {busy ? 'Generating minutes…' : 'Generate AI minutes'}
-                  </button>
-                  {transcripts.length === 0 && <small>A transcript is needed before minutes can be generated.</small>}
-                </div>
-              ) : (
-                <>
-                  <div className="minutes-header">
-                    <div>
-                      <span className="host-eyebrow">AI-GENERATED DOCUMENT</span>
-                      <h2>{minutes.content.title}</h2>
-                    </div>
-                    <button type="button" onClick={() => exportMinutesPdf(meeting, minutes)}>
-                      <HostIcon name="download" /> Download PDF
-                    </button>
-                  </div>
-                  {/* Note: You should import and use <FormalMinutes /> here instead of the old layout */}
-                  <div className="minutes-document">
-                     <section className="minutes-summary">
+                      )
+                    })}
+                    {liveText && (
+                      <article className="transcript-entry live-entry">
+                        <span className="transcript-avatar live"><HostIcon name="wave" /></span>
                         <div>
-                          <h3>Meeting summary</h3>
-                          <p>{minutes.content.summary}</p>
+                          <span className="transcript-meta"><strong>Speaking now</strong><span className="typing-dots"><i /><i /><i /></span></span>
+                          <p>{liveText}</p>
                         </div>
-                      </section>
-                      {/* The old Decisions / Action items are removed. Use <FormalMinutes/> if needed. */}
+                      </article>
+                    )}
+                    <div ref={transcriptEndRef} />
                   </div>
-                </>
-              )}
-            </div>
-          )}
+                </div>
+              </>
+            )}
+          </div>
         </section>
       </div>
 
@@ -386,39 +273,27 @@ export default function HostMeeting() {
             <small>{meeting.status === 'active' ? `${onlineUsers.size} participant${onlineUsers.size === 1 ? '' : 's'} online` : 'This room is now closed'}</small>
           </div>
         </div>
-
         <div className="host-control-actions">
           <button className="host-export-button" type="button" disabled={transcripts.length === 0} onClick={() => exportTranscriptPdf(meeting, transcripts)}>
             <HostIcon name="download" /> <span>Transcript</span>
           </button>
-          <button className="host-summary-button" type="button" onClick={handleSummarize} disabled={busy || transcripts.length === 0}>
-            {busy ? <span className="host-spinner" /> : <HostIcon name="spark" />}
-            <span>{minutes ? 'Regenerate minutes' : 'Generate AI minutes'}</span>
+          
+          <button className="host-end-button" type="button" onClick={() => setShowEndConfirm(true)} disabled={busy}>
+            <HostIcon name="stop" /> <span>End meeting</span>
           </button>
-          {meeting.status === 'active' && (
-            <button className="host-end-button" type="button" onClick={() => setShowEndConfirm(true)} disabled={busy}>
-              <HostIcon name="stop" /> <span>End meeting</span>
-            </button>
-          )}
         </div>
       </footer>
 
       {/* END MEETING MODAL */}
       {showEndConfirm && (
         <div className="end-dialog-backdrop" role="presentation">
-          <div className="end-dialog" role="alertdialog" aria-modal="true" aria-labelledby="end-dialog-title">
+          <div className="end-dialog" role="alertdialog" aria-modal="true">
             <span className="end-dialog-icon"><HostIcon name="stop" /></span>
-            <h2 id="end-dialog-title">End this meeting?</h2>
-            <p>
-              Participants will be disconnected. <strong>We will automatically generate the AI minutes in the background</strong>, so you can review them from your dashboard shortly.
-            </p>
+            <h2>End this meeting?</h2>
+            <p>Participants will be disconnected. You can generate the AI minutes from the next page.</p>
             <div>
-              <button type="button" onClick={() => setShowEndConfirm(false)} disabled={busy}>
-                Keep meeting open
-              </button>
-              <button type="button" onClick={handleEnd} disabled={busy}>
-                {busy ? 'Ending…' : 'End and generate notes'}
-              </button>
+              <button type="button" onClick={() => setShowEndConfirm(false)} disabled={busy}>Keep open</button>
+              <button type="button" onClick={handleEnd} disabled={busy}>{busy ? 'Ending…' : 'End meeting'}</button>
             </div>
           </div>
         </div>

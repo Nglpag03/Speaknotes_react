@@ -16,6 +16,9 @@ export default function MeetingDetail() {
   const [minutes, setMinutes] = useState<Minutes | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Venue & Generation State
+  const [showVenuePrompt, setShowVenuePrompt] = useState(false)
+  const [venue, setVenue] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
 
@@ -45,16 +48,17 @@ export default function MeetingDetail() {
     return () => { cancelled = true }
   }, [code, navigate])
 
-  async function handleGenerateMinutes() {
+  function handleGenerateClick() {
+    setShowVenuePrompt(true)
+  }
+
+  async function submitGenerate() {
     if (!code || isGenerating) return
+    setShowVenuePrompt(false)
     setIsGenerating(true)
     setGenError(null)
     try {
-      // Ask for venue before generating
-      const venueInput = window.prompt("Where was this meeting held?", minutes?.content?.venue || "CICS Faculty Room");
-      const venue = venueInput ? venueInput.trim() : 'N/A';
-
-      const response = await requestSummary(code, venue)
+      const response = await requestSummary(code, venue || 'N/A')
       setMinutes(response.minutes)
       setTimeout(() => { minutesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 100)
     } catch (err) {
@@ -141,44 +145,122 @@ export default function MeetingDetail() {
         </aside>
       </div>
 
-      <div ref={minutesRef}>
-        {minutes ? (
-          <section style={{ marginTop: '48px', animation: 'fadeIn 0.4s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '18px', fontFamily: 'Manrope, sans-serif', margin: 0 }}>Official Minutes</h2>
-              <button className="host-export-button" onClick={() => exportMinutesPdf(meeting, minutes)} style={{ padding: '8px 14px', height: '36px', borderRadius: '8px' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></svg>
-                Download minutes
+<div ref={minutesRef}>
+  {minutes ? (
+    <section style={{ marginTop: '48px', animation: 'fadeIn 0.4s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h2 style={{ fontSize: '18px', fontFamily: 'Manrope, sans-serif', margin: 0 }}>Official Minutes</h2>
+        <button className="host-export-button" onClick={() => exportMinutesPdf(meeting, minutes)} style={{ padding: '8px 14px', height: '36px', borderRadius: '8px' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 21h14" /></svg>
+          Download minutes
+        </button>
+      </div>
+      <FormalMinutes meeting={meeting} minutes={minutes} />
+      <div className="minutes-document" style={{ padding: 0, marginTop: '24px' }}>
+        <section className="minutes-summary"><div><h3>Meeting summary</h3><p>{minutes.content.summary}</p></div></section>
+      </div>
+    </section>
+  ) : (
+    <section className="minutes-empty" style={{ marginTop: '48px', position: 'relative', overflow: 'hidden', background: '#fff', borderRadius: '13px', border: '1px solid #e2e5e1', animation: 'fadeIn 0.4s ease' }}>
+      
+      {/* When generating: show a premium loading experience */}
+      {isGenerating ? (
+        <div style={{ textAlign: 'center', padding: '20px', position: 'relative', zIndex: 1 }}>
+          <div style={{ position: 'relative', display: 'inline-flex', marginBottom: '24px' }}>
+            <span style={{ 
+              position: 'absolute', inset: -12, borderRadius: '50%', 
+              background: 'conic-gradient(from 0deg, transparent, #31685c, transparent)', 
+              animation: 'spin 1.5s linear infinite' 
+            }} />
+            <span style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              width: '64px', height: '64px', borderRadius: '50%', 
+              background: '#fff', position: 'relative',
+              border: '1px solid #e2e5e1'
+            }}>
+              <svg className="host-icon" style={{ width: '28px', height: '28px', color: '#31685c' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 12 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />
+              </svg>
+            </span>
+          </div>
+          <h2 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '22px', fontWeight: 700, color: '#1e2f2a', marginBottom: '8px' }}>
+            Crafting your minutes
+          </h2>
+          <p style={{ color: '#6b7a76', fontSize: '13px', maxWidth: '360px', margin: '0 auto 20px' }}>
+            Analyzing the transcript for key decisions, action items, and a summary.
+          </p>
+          
+          {/* Step indicators */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#31685c', fontWeight: 600 }}>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: '#e2f0ea', animation: 'pulse 1.5s infinite' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              Reading transcript
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#94a3b8' }}>
+              <span style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px dashed #cbd5e1' }} />
+              Extracting decisions
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#94a3b8' }}>
+              <span style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px dashed #cbd5e1' }} />
+              Writing summary
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <span className="minutes-spark"><svg className="host-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 12 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></svg></span>
+          <h2>Generate AI minutes</h2>
+          <p>Turn this transcript into a clear summary, decisions, and action items.</p>
+          {genError && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '8px', color: '#b91c1c', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '400px', margin: '0 auto 20px' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              {genError}
+            </div>
+          )}
+          <button type="button" onClick={handleGenerateClick} disabled={transcripts.length === 0} style={{ opacity: (transcripts.length === 0) ? 0.6 : 1, cursor: (transcripts.length === 0) ? 'not-allowed' : 'pointer' }}>
+            Generate now
+          </button>
+          {transcripts.length === 0 && <small>A transcript is needed before minutes can be generated.</small>}
+        </>
+      )}
+    </section>
+  )}
+</div>
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+
+      {/* VENUE PROMPT MODAL */}
+      {showVenuePrompt && (
+        <div className="end-dialog-backdrop" role="presentation">
+          <div className="end-dialog" role="alertdialog" aria-modal="true">
+            <h2>Where was the meeting held?</h2>
+            <p>This will appear on the official document.</p>
+            <input 
+              type="text" 
+              value={venue} 
+              onChange={(e) => setVenue(e.target.value)} 
+              placeholder="e.g. CICS Faculty Room, Zoom" 
+              autoFocus
+              className="set-input"
+              style={{ width: '100%', marginBottom: '16px' }}
+              onKeyDown={(e) => { 
+                if (e.key === 'Enter' && venue.trim()) submitGenerate() 
+              }}
+            />
+            <div>
+              <button type="button" onClick={() => setShowVenuePrompt(false)} disabled={isGenerating}>Cancel</button>
+              <button 
+                type="button" 
+                onClick={submitGenerate} 
+                disabled={isGenerating || !venue.trim()}
+              >
+                {isGenerating ? 'Generating…' : 'Generate Notes'}
               </button>
             </div>
-            <FormalMinutes meeting={meeting} minutes={minutes} />
-            <div className="minutes-document" style={{ padding: 0, marginTop: '24px' }}>
-              <section className="minutes-summary"><div><h3>Meeting summary</h3><p>{minutes.content.summary}</p></div></section>
-            </div>
-          </section>
-        ) : (
-          <section className="minutes-empty" style={{ marginTop: '48px', background: '#fff', borderRadius: '13px', border: '1px solid #e2e5e1', animation: 'fadeIn 0.4s ease' }}>
-            <span className="minutes-spark"><svg className="host-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 12 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></svg></span>
-            <h2>Generate AI minutes</h2>
-            <p>
-              {meeting.status === 'ended' && transcripts.length > 0 
-                ? "The AI is likely still processing this meeting. Click below if it hasn't appeared yet." 
-                : "Turn this transcript into a clear summary, decisions, and action items."}
-            </p>
-            {genError && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '8px', color: '#b91c1c', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '400px', margin: '0 auto 20px' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                {genError}
-              </div>
-            )}
-            <button type="button" onClick={handleGenerateMinutes} disabled={isGenerating || transcripts.length === 0} style={{ opacity: (isGenerating || transcripts.length === 0) ? 0.6 : 1, cursor: (isGenerating || transcripts.length === 0) ? 'not-allowed' : 'pointer' }}>
-              {isGenerating ? <><span className="host-spinner" style={{ borderTopColor: '#fff', marginRight: '8px' }} /> Generating…</> : 'Generate now'}
-            </button>
-            {transcripts.length === 0 && <small>A transcript is needed before minutes can be generated.</small>}
-          </section>
-        )}
-      </div>
-      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+          </div>
+        </div>
+      )}
     </>
   )
 }

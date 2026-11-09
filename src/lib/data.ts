@@ -99,6 +99,11 @@ export async function requestSummary(code: string, venue: string = 'N/A'): Promi
     supabase.from('participants').select('full_name').eq('meeting_id', code)
   ]);
 
+  // Format the date directly in JS so the AI doesn't mess it up
+  const formattedDate = meeting?.created_at 
+    ? new Date(meeting.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) 
+    : 'N/A';
+
   const startTime = meeting?.created_at 
     ? new Date(meeting.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
     : 'N/A';
@@ -107,7 +112,7 @@ export async function requestSummary(code: string, venue: string = 'N/A'): Promi
     ? new Date(meeting.ended_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
     : 'N/A';
 
-  // Format participants into an array
+  // Format participants
   const presentList = participants?.map(p => p.full_name).filter(Boolean) || [];
 
   const transcriptText = transcripts
@@ -115,24 +120,22 @@ export async function requestSummary(code: string, venue: string = 'N/A'): Promi
     .join('\n');
 
   const prompt = `You are a meeting notes assistant. Analyze the transcript and return ONLY valid JSON.
-Follow this exact structure for the table_data. Look for typical meeting sections like Preliminaries, Agenda, Decisions, etc., and format them accordingly.
+You MUST use the exact values provided for "date", "venue", "time_started", and "time_ended". Do not change them.
 
 {
   "title": "Minutes of the Meeting",
-  "date": "${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}",
-  "venue": "${venue}",
+  "date": "${formattedDate}",
+  "venue": "${venue.trim() || 'N/A'}",
   "time_started": "${startTime}",
   "time_ended": "${endTime}",
-  "agenda": ["Workshop on Preparation", "SWOT Analysis"],
+  "agenda": ["Topic 1"],
   "present": ${JSON.stringify(presentList)},
   "table_data": [
     { "agenda_no": "Preliminaries", "activities": "Prayer", "raised_by": "AVP", "action": "" },
-    { "agenda_no": "Preliminaries", "activities": "National Anthem", "raised_by": "AVP", "action": "" },
     { "agenda_no": "1", "activities": "Discussion topic", "raised_by": "Name", "action": "Agreed action" }
   ],
   "summary": "Short summary"
 }
-Do not invent names. Use the provided 'present' list. Keep the times exactly as provided.
 
 Transcript:
 ${transcriptText}`;
