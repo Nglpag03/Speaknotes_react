@@ -92,40 +92,39 @@ export async function requestSummary(code: string): Promise<{ created: boolean; 
     throw new Error('No transcripts available for this meeting. Speak first!');
   }
 
+  // ✅ NEW: Fetch the meeting to get real start/end times
+  const { data: meeting } = await supabase
+    .from('meetings')
+    .select('created_at, ended_at')
+    .eq('id', code)
+    .single();
+
+  const startTime = meeting?.created_at 
+    ? new Date(meeting.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
+    : 'N/A';
+  
+  const endTime = meeting?.ended_at 
+    ? new Date(meeting.ended_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
+    : 'N/A';
+
   const transcriptText = transcripts
     .map((t) => `${t.full_name ?? 'Guest'}: ${t.content}`)
     .join('\n');
 
-  const prompt = `You are an AI assistant tasked with generating formal meeting minutes for a university setting.
-Analyze the following transcript and extract the information to fill out this exact JSON schema.
-
-CRITICAL INSTRUCTIONS:
-1. "agenda" should be a list of topics discussed.
-2. "present" should be a list of names of people who spoke or were mentioned.
-3. "table_data" is the most important. You must map the discussion into rows. 
-   - "agenda_no" should be a short category (e.g., "Preliminaries", "Unfinished Business", "New Business").
-   - "activities" is the specific issue or topic discussed.
-   - "raised_by" is the person who brought it up.
-   - "action" is the agreed-upon solution, decision, or next step.
-
-Return ONLY valid JSON in this exact format:
+  // ✅ NEW: Inject the times into the prompt
+  const prompt = `You are a meeting notes assistant. Analyze the transcript and return ONLY valid JSON:
 {
   "title": "Minutes of the Meeting",
-  "date": "Extract date from transcript or use today",
-  "venue": "Extract venue if mentioned, else 'N/A'",
-  "time_started": "Extract start time if mentioned, else 'N/A'",
-  "time_ended": "Extract end time if mentioned, else 'N/A'",
-  "agenda": ["Topic 1", "Topic 2"],
-  "present": ["Name 1", "Name 2"],
-  "table_data": [
-    {
-      "agenda_no": "1",
-      "activities": "Discussion about the Q4 budget",
-      "raised_by": "John Doe",
-      "action": "Approved the budget and assigned Jane to finalize paperwork."
-    }
-  ]
+  "date": "${new Date().toLocaleDateString()}",
+  "venue": "N/A",
+  "time_started": "${startTime}",
+  "time_ended": "${endTime}",
+  "agenda": ["Topic 1"],
+  "present": ["Name 1"],
+  "table_data": [{ "agenda_no": "1", "activities": "Discussion topic", "raised_by": "Name", "action": "Agreed action" }],
+  "summary": "Short summary"
 }
+Do not change the time_started and time_ended values, just return them exactly as provided above.
 
 Transcript:
 ${transcriptText}`;

@@ -57,10 +57,25 @@ export function FormalMinutes({ meeting, minutes }: { meeting: Meeting; minutes:
           <strong>Venue</strong><span>:</span><span>{c.venue || 'N/A'}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '130px 10px 1fr' }}>
-          <strong>Time Started</strong><span>:</span><span>{c.time_started || 'N/A'}</span>
+          <strong>Time Started</strong>
+          <span>:</span>
+          <span>
+            {c.time_started && c.time_started !== 'N/A' 
+              ? c.time_started 
+              : new Date(meeting.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </span>
         </div>
+        
         <div style={{ display: 'grid', gridTemplateColumns: '130px 10px 1fr' }}>
-          <strong>Time Ended</strong><span>:</span><span>{c.time_ended || 'N/A'}</span>
+          <strong>Time Ended</strong>
+          <span>:</span>
+          <span>
+            {c.time_ended && c.time_ended !== 'N/A' 
+              ? c.time_ended 
+              : (meeting.ended_at 
+                  ? new Date(meeting.ended_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
+                  : 'N/A')}
+          </span>
         </div>
       </div>
 
