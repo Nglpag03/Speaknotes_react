@@ -79,7 +79,8 @@ export async function getMinutes(code: string): Promise<Minutes | null> {
   if (error) throw error;
   return data;
 }
-export async function requestSummary(code: string): Promise<{ created: boolean; minutes: Minutes }> {
+
+export async function requestSummary(code: string, venue: string = 'N/A'): Promise<{ created: boolean; minutes: Minutes }> {
   // 1. Fetch transcripts
   const { data: transcripts, error: txError } = await supabase
     .from('transcripts')
@@ -92,12 +93,11 @@ export async function requestSummary(code: string): Promise<{ created: boolean; 
     throw new Error('No transcripts available for this meeting. Speak first!');
   }
 
-  // ✅ NEW: Fetch the meeting to get real start/end times
-  const { data: meeting } = await supabase
-    .from('meetings')
-    .select('created_at, ended_at')
-    .eq('id', code)
-    .single();
+  // 2. Fetch meeting for real times and participants
+  const [{ data: meeting }, { data: participants }] = await Promise.all([
+    supabase.from('meetings').select('created_at, ended_at').eq('id', code).single(),
+    supabase.from('participants').select('full_name').eq('meeting_id', code)
+  ]);
 
   const startTime = meeting?.created_at 
     ? new Date(meeting.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
@@ -107,24 +107,32 @@ export async function requestSummary(code: string): Promise<{ created: boolean; 
     ? new Date(meeting.ended_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) 
     : 'N/A';
 
+  // Format participants into an array
+  const presentList = participants?.map(p => p.full_name).filter(Boolean) || [];
+
   const transcriptText = transcripts
     .map((t) => `${t.full_name ?? 'Guest'}: ${t.content}`)
     .join('\n');
 
-  // ✅ NEW: Inject the times into the prompt
-  const prompt = `You are a meeting notes assistant. Analyze the transcript and return ONLY valid JSON:
+  const prompt = `You are a meeting notes assistant. Analyze the transcript and return ONLY valid JSON.
+Follow this exact structure for the table_data. Look for typical meeting sections like Preliminaries, Agenda, Decisions, etc., and format them accordingly.
+
 {
   "title": "Minutes of the Meeting",
-  "date": "${new Date().toLocaleDateString()}",
-  "venue": "N/A",
+  "date": "${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}",
+  "venue": "${venue}",
   "time_started": "${startTime}",
   "time_ended": "${endTime}",
-  "agenda": ["Topic 1"],
-  "present": ["Name 1"],
-  "table_data": [{ "agenda_no": "1", "activities": "Discussion topic", "raised_by": "Name", "action": "Agreed action" }],
+  "agenda": ["Workshop on Preparation", "SWOT Analysis"],
+  "present": ${JSON.stringify(presentList)},
+  "table_data": [
+    { "agenda_no": "Preliminaries", "activities": "Prayer", "raised_by": "AVP", "action": "" },
+    { "agenda_no": "Preliminaries", "activities": "National Anthem", "raised_by": "AVP", "action": "" },
+    { "agenda_no": "1", "activities": "Discussion topic", "raised_by": "Name", "action": "Agreed action" }
+  ],
   "summary": "Short summary"
 }
-Do not change the time_started and time_ended values, just return them exactly as provided above.
+Do not invent names. Use the provided 'present' list. Keep the times exactly as provided.
 
 Transcript:
 ${transcriptText}`;

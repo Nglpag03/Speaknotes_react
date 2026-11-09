@@ -50,7 +50,11 @@ export default function MeetingDetail() {
     setIsGenerating(true)
     setGenError(null)
     try {
-      const response = await requestSummary(code)
+      // Ask for venue before generating
+      const venueInput = window.prompt("Where was this meeting held?", minutes?.content?.venue || "CICS Faculty Room");
+      const venue = venueInput ? venueInput.trim() : 'N/A';
+
+      const response = await requestSummary(code, venue)
       setMinutes(response.minutes)
       setTimeout(() => { minutesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 100)
     } catch (err) {

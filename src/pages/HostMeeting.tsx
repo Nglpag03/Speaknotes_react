@@ -116,28 +116,30 @@ export default function HostMeeting() {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [transcripts, liveText])
 
-// Inside HostMeeting.tsx
-
   async function handleEnd() {
     if (!code) return
     setBusy(true)
     setError(null)
 
     try {
-      // 1. Mark meeting as ended in DB
+      // 1. Ask for venue
+      const venueInput = window.prompt("Where was this meeting held? (e.g., CICS Faculty Room, Zoom)", "CICS Faculty Room");
+      
+      // If the user clicks cancel, default to N/A
+      const venue = venueInput ? venueInput.trim() : 'N/A';
+
+      // 2. Mark meeting as ended
       await endMeeting(code)
       setMeeting((current) => current ? { ...current, status: 'ended' } : null)
 
-      // 2. Automatically trigger AI generation (don't await it, let it run in background)
-      // We don't `await` this so the user doesn't have to wait 10 seconds.
+      // 3. Auto-generate AI minutes with the venue passed in
       if (transcripts.length > 0) {
-        requestSummary(code).catch(err => {
+        requestSummary(code, venue).catch(err => {
           console.error("Background AI generation failed:", err)
-          // Optional: You could set a local storage flag to notify the user later
         })
       }
 
-      // 3. Instantly redirect to Home
+      // 4. Redirect
       setShowEndConfirm(false)
       navigate('/home')
       
@@ -147,6 +149,7 @@ export default function HostMeeting() {
       setBusy(false)
     }
   }
+  
   async function handleSummarize() {
     if (!code || busy) return
     setBusy(true)

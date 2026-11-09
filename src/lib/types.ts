@@ -40,6 +40,7 @@ export interface MinutesContent {
   decisions: string[];
   action_items: { owner: string; task: string; due?: string }[];
   attendees: string[];
+  venue?: string;
 }
 
 export interface Minutes {
